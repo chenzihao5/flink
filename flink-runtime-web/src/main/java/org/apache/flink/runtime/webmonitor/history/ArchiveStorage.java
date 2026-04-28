@@ -21,6 +21,7 @@ package org.apache.flink.runtime.webmonitor.history;
 
 import javax.annotation.Nullable;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
 
@@ -31,7 +32,7 @@ import java.util.List;
  *
  * @param <T> Type of the storage entries.
  */
-public interface ArchiveStorage<T> {
+public interface ArchiveStorage<T> extends Closeable {
 
     /**
      * Returns whether the entry identified by {@code key} exists in this storage.

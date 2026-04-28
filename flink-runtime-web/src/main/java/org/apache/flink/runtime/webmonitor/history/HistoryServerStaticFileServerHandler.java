@@ -53,7 +53,12 @@ public class HistoryServerStaticFileServerHandler extends AbstractHistoryServerH
     // ------------------------------------------------------------------------
 
     public HistoryServerStaticFileServerHandler(File rootPath) throws IOException {
-        super(new FileArchiveStorage(rootPath), rootPath);
+        this(new FileArchiveStorage(rootPath), rootPath);
+    }
+
+    public HistoryServerStaticFileServerHandler(
+            FileArchiveStorage fileArchiveStorage, File rootPath) throws IOException {
+        super(fileArchiveStorage, rootPath);
     }
 
     // ------------------------------------------------------------------------

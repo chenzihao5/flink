@@ -101,6 +101,11 @@ public class FileArchiveStorage implements ArchiveStorage<File> {
         return new ArrayList<>();
     }
 
+    @Override
+    public void close() {
+        // nothing to close
+    }
+
     void writeTargetFile(File target, String json) throws IOException {
         Path parent = target.getParentFile().toPath();
 

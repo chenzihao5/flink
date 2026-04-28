@@ -247,5 +247,64 @@ public class HistoryServerOptions {
                                             text(CONFIGURE_CONSISTENT))
                                     .build());
 
+    public static final ConfigOption<HistoryServerArchiveStorageType>
+            HISTORY_SERVER_ARCHIVE_STORAGE_TYPE =
+                    key("historyserver.archive.storage.type")
+                            .enumType(HistoryServerArchiveStorageType.class)
+                            .defaultValue(HistoryServerArchiveStorageType.FILE)
+                            .withDescription(
+                                    Description.builder()
+                                            .text("The type of archive storage.")
+                                            .build());
+
+    public static final ConfigOption<String> HISTORY_SERVER_ARCHIVE_ROCKSDB_NATIVE_LIB_DIR =
+            key("historyserver.archive.rocksdb.native-lib-dir")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Base directory used to extract the RocksDB native library for the "
+                                    + "HistoryServer archive storage. Each HistoryServer instance "
+                                    + "extracts the library into a unique sub-directory under this "
+                                    + "directory. Defaults to the JVM 'java.io.tmpdir' when not "
+                                    + "configured. Only applies when "
+                                    + "'historyserver.archive.storage.type' is 'ROCKSDB'.");
+
+    /** Compression type used for the non-bottommost levels of the RocksDB SST files. */
+    public static final ConfigOption<String> HISTORY_SERVER_ARCHIVE_ROCKSDB_COMPRESSION =
+            key("historyserver.archive.rocksdb.compression")
+                    .stringType()
+                    .defaultValue("LZ4_COMPRESSION")
+                    .withDescription(
+                            "Compression type used for the non-bottommost levels of the RocksDB "
+                                    + "SST files. Allowed values are the names of the RocksDB "
+                                    + "'CompressionType' enum (e.g. 'NO_COMPRESSION', "
+                                    + "'SNAPPY_COMPRESSION', 'LZ4_COMPRESSION', "
+                                    + "'ZSTD_COMPRESSION'). Only applies when "
+                                    + "'historyserver.archive.storage.type' is 'ROCKSDB'.");
+
+    /** Compression type used for the bottommost level of the RocksDB SST files. */
+    public static final ConfigOption<String> HISTORY_SERVER_ARCHIVE_ROCKSDB_BOTTOMMOST_COMPRESSION =
+            key("historyserver.archive.rocksdb.bottommost-compression")
+                    .stringType()
+                    .defaultValue("ZSTD_COMPRESSION")
+                    .withDescription(
+                            "Compression type used for the bottommost level of the "
+                                    + "RocksDB SST files. Allowed values are the names of "
+                                    + "the RocksDB 'CompressionType' enum. The bottommost "
+                                    + "level is typically the largest and coldest, so a "
+                                    + "stronger compression algorithm such as "
+                                    + "'ZSTD_COMPRESSION' is usually a good choice. Only "
+                                    + "applies when 'historyserver.archive.storage.type' "
+                                    + "is 'ROCKSDB'.");
+
+    /** The type of archive storage. */
+    public enum HistoryServerArchiveStorageType {
+        /** Local file system. */
+        FILE,
+
+        /** RocksDB. */
+        ROCKSDB
+    }
+
     private HistoryServerOptions() {}
 }

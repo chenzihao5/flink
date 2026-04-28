@@ -137,6 +137,7 @@ public class HistoryServer {
     private final Thread shutdownHook;
 
     private final ArchiveStorage archiveStorage;
+    private final AbstractHistoryServerHandler<?> historyServerHandler;
 
     public static void main(String[] args) throws Exception {
         EnvironmentInformation.logEnvironmentInfo(LOG, "HistoryServer", args);
@@ -249,7 +250,26 @@ public class HistoryServer {
         refreshIntervalMillis =
                 config.get(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_REFRESH_INTERVAL).toMillis();
 
-        archiveStorage = new FileArchiveStorage(webDir);
+        HistoryServerOptions.HistoryServerArchiveStorageType archiveStorageType =
+                config.get(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_STORAGE_TYPE);
+        switch (archiveStorageType) {
+            case FILE:
+                archiveStorage = new FileArchiveStorage(webDir);
+                historyServerHandler =
+                        new HistoryServerStaticFileServerHandler(
+                                (FileArchiveStorage) archiveStorage, webDir);
+                break;
+            case ROCKSDB:
+                File dbPath = new File(webDir, "rocksdb");
+                Files.createDirectories(dbPath.toPath());
+                archiveStorage = new RocksDBArchiveStorage(dbPath, config);
+                historyServerHandler =
+                        new HistoryServerRocksDBHandler(
+                                (RocksDBArchiveStorage) archiveStorage, webDir);
+                break;
+            default:
+                throw new FlinkException("Unsupported archive storage type: " + archiveStorageType);
+        }
 
         archiveFetcher =
                 new HistoryServerArchiveFetcher(
@@ -354,9 +374,9 @@ public class HistoryServer {
                                             new GeneratedLogUrlHandler(
                                                     CompletableFuture.completedFuture(pattern))));
 
-            router.addGet("/:*", new HistoryServerStaticFileServerHandler(webDir));
-
             createDashboardConfigFile();
+
+            router.addGet("/:*", historyServerHandler);
 
             executor.scheduleWithFixedDelay(
                     getArchiveFetchingRunnable(), 0, refreshIntervalMillis, TimeUnit.MILLISECONDS);
@@ -388,6 +408,12 @@ public class HistoryServer {
                 }
 
                 ExecutorUtils.gracefulShutdown(1, TimeUnit.SECONDS, executor);
+
+                try {
+                    archiveStorage.close();
+                } catch (Throwable t) {
+                    LOG.warn("Error while closing archive storage.", t);
+                }
 
                 try {
                     LOG.info("Removing web dashboard root cache directory {}", webDir);

@@ -28,6 +28,7 @@ import org.apache.flink.runtime.rest.messages.ErrorResponseBody;
 
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelFuture;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelFutureListener;
+import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandler;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandlerContext;
 import org.apache.flink.shaded.netty4.io.netty.channel.DefaultFileRegion;
 import org.apache.flink.shaded.netty4.io.netty.channel.SimpleChannelInboundHandler;
@@ -66,6 +67,7 @@ import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVer
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /** Abstract base class for HistoryServer handlers. */
+@ChannelHandler.Sharable
 public abstract class AbstractHistoryServerHandler<T>
         extends SimpleChannelInboundHandler<RoutedRequest> {
 

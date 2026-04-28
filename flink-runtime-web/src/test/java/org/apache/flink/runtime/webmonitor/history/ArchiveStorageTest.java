@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.webmonitor.history;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,6 +56,14 @@ abstract class ArchiveStorageTest<T> {
     @BeforeEach
     void setUpStorage() throws Exception {
         storage = createStorage();
+    }
+
+    @AfterEach
+    void tearDownStorage() throws Exception {
+        if (storage != null) {
+            storage.close();
+            storage = null;
+        }
     }
 
     // ----------------------------- exists / put / get / delete ----------------------------
