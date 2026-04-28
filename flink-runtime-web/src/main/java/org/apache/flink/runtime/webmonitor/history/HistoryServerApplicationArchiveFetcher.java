@@ -29,9 +29,6 @@ import org.apache.flink.runtime.messages.webmonitor.ApplicationDetails;
 import org.apache.flink.runtime.messages.webmonitor.MultipleApplicationsDetails;
 import org.apache.flink.runtime.rest.messages.ApplicationsOverviewHeaders;
 import org.apache.flink.runtime.webmonitor.history.retaining.ArchiveRetainedStrategy;
-import org.apache.flink.util.FileUtils;
-
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,9 +76,16 @@ public class HistoryServerApplicationArchiveFetcher extends HistoryServerArchive
             File webDir,
             Consumer<HistoryServerApplicationArchiveFetcher.ArchiveEvent> archiveEventListener,
             boolean cleanupExpiredArchives,
-            ArchiveRetainedStrategy retainedStrategy)
+            ArchiveRetainedStrategy retainedStrategy,
+            ArchiveStorage archiveStorage)
             throws IOException {
-        super(refreshDirs, webDir, archiveEventListener, cleanupExpiredArchives, retainedStrategy);
+        super(
+                refreshDirs,
+                webDir,
+                archiveEventListener,
+                cleanupExpiredArchives,
+                retainedStrategy,
+                archiveStorage);
 
         for (HistoryServer.RefreshLocation refreshDir : refreshDirs) {
             cachedApplicationIdsToJobIds.put(refreshDir.getPath(), new HashMap<>());
@@ -173,15 +177,15 @@ public class HistoryServerApplicationArchiveFetcher extends HistoryServerArchive
             String path = archive.getPath();
             String json = archive.getJson();
 
-            File target;
+            String key;
             if (path.equals(ApplicationsOverviewHeaders.URL)) {
-                target = new File(webApplicationsOverviewDir, applicationId + JSON_FILE_ENDING);
+                key = "/" + APPLICATION_OVERVIEWS_SUBDIR + "/" + applicationId + JSON_FILE_ENDING;
             } else {
                 // this implicitly writes into webApplicationDir
-                target = new File(webDir, path + JSON_FILE_ENDING);
+                key = path + JSON_FILE_ENDING;
             }
 
-            writeTargetFile(target, json);
+            archiveStorage.put(key, json);
         }
 
         return new ArchiveEvent(applicationId, ArchiveEventType.CREATED);
@@ -209,26 +213,25 @@ public class HistoryServerApplicationArchiveFetcher extends HistoryServerArchive
     }
 
     private ArchiveEvent deleteApplicationFiles(String applicationId) {
-        // Make sure we do not include this application in the overview
+        // Delete application overview file in application-overviews directory
         try {
-            Files.deleteIfExists(
-                    new File(webApplicationsOverviewDir, applicationId + JSON_FILE_ENDING)
-                            .toPath());
+            archiveStorage.delete(
+                    "/" + APPLICATION_OVERVIEWS_SUBDIR + "/" + applicationId + JSON_FILE_ENDING);
         } catch (IOException ioe) {
             LOG.warn("Could not delete file from overview directory.", ioe);
         }
 
-        // Clean up application files we may have created
-        File applicationDirectory = new File(webApplicationDir, applicationId);
+        // Delete application details directory in applications directory
         try {
-            FileUtils.deleteDirectory(applicationDirectory);
+            archiveStorage.deletePrefix("/" + APPLICATIONS_SUBDIR + "/" + applicationId);
         } catch (IOException ioe) {
             LOG.warn("Could not clean up application directory.", ioe);
         }
 
+        // Delete application overview file in applications directory
         try {
-            Files.deleteIfExists(
-                    new File(webApplicationDir, applicationId + JSON_FILE_ENDING).toPath());
+            archiveStorage.delete(
+                    "/" + APPLICATIONS_SUBDIR + "/" + applicationId + JSON_FILE_ENDING);
         } catch (IOException ioe) {
             LOG.warn("Could not delete file from application directory.", ioe);
         }
@@ -253,21 +256,26 @@ public class HistoryServerApplicationArchiveFetcher extends HistoryServerArchive
      * <p>For the display in the HistoryServer WebFrontend we have to combine these overviews.
      */
     private void updateApplicationOverview() {
-        try (JsonGenerator gen =
-                jacksonFactory.createGenerator(
-                        HistoryServer.createOrGetFile(webDir, ApplicationsOverviewHeaders.URL))) {
-            File[] overviews = new File(webApplicationsOverviewDir.getPath()).listFiles();
-            if (overviews != null) {
-                Collection<ApplicationDetails> allApplications = new ArrayList<>(overviews.length);
-                for (File overview : overviews) {
-                    MultipleApplicationsDetails subApplications =
-                            mapper.readValue(overview, MultipleApplicationsDetails.class);
-                    allApplications.addAll(subApplications.getApplications());
+        try {
+            Collection<ApplicationDetails> allApplications = new ArrayList<>();
+            List<Object> overviews = archiveStorage.getByPrefix("/" + APPLICATION_OVERVIEWS_SUBDIR);
+            for (Object overview : overviews) {
+                MultipleApplicationsDetails subApplications;
+                if (overview instanceof File) {
+                    subApplications =
+                            mapper.readValue((File) overview, MultipleApplicationsDetails.class);
+                } else {
+                    subApplications =
+                            mapper.readValue((String) overview, MultipleApplicationsDetails.class);
                 }
-                mapper.writeValue(gen, new MultipleApplicationsDetails(allApplications));
+                allApplications.addAll(subApplications.getApplications());
             }
-        } catch (IOException ioe) {
-            LOG.error("Failed to update application overview.", ioe);
+            String overviewWithApplications =
+                    mapper.writeValueAsString(new MultipleApplicationsDetails(allApplications));
+            archiveStorage.put(
+                    ApplicationsOverviewHeaders.URL + JSON_FILE_ENDING, overviewWithApplications);
+        } catch (Exception e) {
+            LOG.error("Failed to update application overview.", e);
         }
     }
 }

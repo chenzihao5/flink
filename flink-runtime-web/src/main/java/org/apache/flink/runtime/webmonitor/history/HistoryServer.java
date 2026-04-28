@@ -136,6 +136,8 @@ public class HistoryServer {
     private final AtomicBoolean shutdownRequested = new AtomicBoolean(false);
     private final Thread shutdownHook;
 
+    private final ArchiveStorage archiveStorage;
+
     public static void main(String[] args) throws Exception {
         EnvironmentInformation.logEnvironmentInfo(LOG, "HistoryServer", args);
 
@@ -246,20 +248,25 @@ public class HistoryServer {
 
         refreshIntervalMillis =
                 config.get(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_REFRESH_INTERVAL).toMillis();
+
+        archiveStorage = new FileArchiveStorage(webDir);
+
         archiveFetcher =
                 new HistoryServerArchiveFetcher(
                         refreshDirs,
                         webDir,
                         jobArchiveEventListener,
                         cleanupExpiredJobs,
-                        CompositeArchiveRetainedStrategy.createForJobFromConfig(config));
+                        CompositeArchiveRetainedStrategy.createForJobFromConfig(config),
+                        archiveStorage);
         applicationArchiveFetcher =
                 new HistoryServerApplicationArchiveFetcher(
                         refreshDirs,
                         webDir,
                         applicationArchiveEventListener,
                         cleanupExpiredApplications,
-                        CompositeArchiveRetainedStrategy.createForApplicationFromConfig(config));
+                        CompositeArchiveRetainedStrategy.createForApplicationFromConfig(config),
+                        archiveStorage);
 
         this.shutdownHook =
                 ShutdownHookUtil.addShutdownHook(
@@ -411,21 +418,16 @@ public class HistoryServer {
     }
 
     private void createDashboardConfigFile() throws IOException {
-        try (FileWriter fw = createOrGetFile(webDir, "config")) {
-            fw.write(
-                    createConfigJson(
-                            DashboardConfiguration.from(
-                                    webRefreshIntervalMillis,
-                                    ZonedDateTime.now(),
-                                    false,
-                                    false,
-                                    false,
-                                    true)));
-            fw.flush();
-        } catch (IOException ioe) {
-            LOG.error("Failed to write config file.");
-            throw ioe;
-        }
+        String configJson =
+                createConfigJson(
+                        DashboardConfiguration.from(
+                                webRefreshIntervalMillis,
+                                ZonedDateTime.now(),
+                                false,
+                                false,
+                                false,
+                                true));
+        archiveStorage.put("/config.json", configJson);
     }
 
     private static String createConfigJson(DashboardConfiguration dashboardConfiguration)
@@ -438,7 +440,7 @@ public class HistoryServer {
         private final Path path;
         private final FileSystem fs;
 
-        private RefreshLocation(Path path, FileSystem fs) {
+        protected RefreshLocation(Path path, FileSystem fs) {
             this.path = path;
             this.fs = fs;
         }
